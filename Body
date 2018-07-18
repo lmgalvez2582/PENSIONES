@@ -1,0 +1,887 @@
+CREATE OR REPLACE PACKAGE BODY FICOPEN.FPC_RETIROS AS
+/******************************************************************************
+   NAME:       FPC_RETIROS
+   PURPOSE:
+
+   REVISIONS:
+   Ver        Date        Author           Description
+   ---------  ----------  ---------------  ------------------------------------
+   1.0        21/06/2017      HN21528       1. Created this package body.
+******************************************************************************/
+
+PROCEDURE CONSULTA_TASA (R_TASA_COMPRA OUT NUMBER,
+                                               R_ERROR OUT VARCHAR2) IS 
+                                               
+ R_ERRORES VARCHAR2(100) := 'OK';
+ 
+ BEGIN
+    BEGIN
+        SELECT nvl (max( CO.VALOR_COMPRA_BCG),0)
+          INTO R_TASA_COMPRA
+          FROM CG_TIPOS_DE_CAMBIO co 
+          WHERE CO.CODIGO_MONEDA = 1 AND CO.FECHA_TIPO_DE_CAMBIO=  (SELECT DISTINCT max(FECHA_TIPO_DE_CAMBIO) from CG_TIPOS_DE_CAMBIO);  
+    EXCEPTION WHEN NO_DATA_FOUND THEN
+              R_ERRORES := 'Error-no existe data '||SQLCODE||' '||SQLERRM;
+          WHEN  OTHERS THEN
+              R_ERRORES := 'Error-Fallo en el procedimiento :'||SQLCODE||' '||SQLERRM;
+  END;
+     R_ERROR := R_ERRORES;
+ END;
+
+PROCEDURE R_SOLI_RETIRO_P_1 (R_NUM_SOLICITUD OUT VARCHAR2,
+                                               R_COD_TIP_RETIRO IN VARCHAR2,
+                                               R_COD_CUENTA IN VARCHAR2,
+                                               R_SALDO1 IN NUMBER,
+                                               R_SALDO2 IN NUMBER,
+                                               R_SALDO3 IN NUMBER,
+                                               R_SALDO4 IN NUMBER,
+                                               R_SALDO5 IN NUMBER,
+                                               R_CARGO_POR IN NUMBER,
+                                               R_ERROR OUT VARCHAR2) IS
+                                                    
+    R_ERRORES VARCHAR2(100) := 'OK';
+    R_SOLICITUD VARCHAR2(100) := '0';
+    R_SOLICITUD_1 VARCHAR2(100) := '0';
+    R_SOLICITUD_2 VARCHAR2(100) := '0';
+    R_TIP_R VARCHAR2(8);
+    R_TIP_R_1 VARCHAR2(8);
+    C_COD_PERS VARCHAR2(9);
+    C_COD_CTA_COLECTIVA VARCHAR2(15);
+    R_SALDO_PA VARCHAR2(3);
+    R_CTA_CONTRI VARCHAR2(3);
+    R_EXT VARCHAR2(3);
+    COD_SUBPROD VARCHAR2(10);
+    R_NUM VARCHAR2(4);
+    SAL_TOTAL NUMBER(38,2);
+    R_SALDO10 NUMBER(38,2);
+    R_SALDO11 NUMBER(38,2);
+    R_SALDO12 NUMBER(38,2);
+    R_SALDO13 NUMBER(38,2);
+    R_SALDO17 NUMBER(38,2);
+    R_TIP_SALDO NUMBER(2);
+    R_VAR VARCHAR2(5);
+    R_VALOR NUMBER(38,2);
+    R_VALORP NUMBER(38,2);
+    
+    R_VALOR_TOTAL NUMBER(38,2);
+    
+    R_TSP NUMBER(38,2) := NULL;
+    R_ACH NUMBER(38,2) := NULL;
+    R_CEQUE NUMBER(38,2) := NULL;
+    R_FORMA_PAGO VARCHAR2(4) := NULL;
+    R_APORTE_PATRONAL VARCHAR2(4) := NULL;
+    
+    R_CUENTA_ORIGEN VARCHAR2(50) := NULL;
+    R_CUENTA_DESTINO VARCHAR2 (50):= NULL;
+    R_BANCO_DESTINO VARCHAR2(50):= NULL;
+    R_TIPO_CUENTA VARCHAR2(15):= NULL;
+
+     BEGIN  
+          BEGIN
+           
+              ----Extrae el codigo de sub producto
+              SELECT C.COD_SUBPRODUCTO  ,C.COD_CLIENTE, C.COD_CTA_COLECTIVA
+              INTO COD_SUBPROD  ,C_COD_PERS, C_COD_CTA_COLECTIVA
+              FROM FO_CUENTAS C
+              WHERE C.COD_CUENTA= R_COD_CUENTA;
+              -----Extrae el codigo de retiro
+              SELECT TP.COD_TIPO_RETIRO 
+              INTO R_TIP_R
+              FROM FO_TIPO_RETIRO TP 
+              WHERE TP.COD_SUBPRODUCTO = COD_SUBPROD
+              AND TP.SUBTIP_TRANSAC = R_COD_TIP_RETIRO;
+              
+              -----Extrae el codigo de retiro
+              SELECT TP.COD_TIPO_RETIRO 
+              INTO R_TIP_R_1
+              FROM FO_TIPO_RETIRO TP 
+              WHERE TP.COD_SUBPRODUCTO = COD_SUBPROD
+              AND TP.SUBTIP_TRANSAC = 51;
+              -----Verifica que la cuenta exista
+              SELECT NVL(COUNT(*),0)
+              INTO R_EXT
+              FROM FO_CUENTAS C
+              WHERE C.COD_CUENTA=R_COD_CUENTA;
+              
+            
+              ----Verifica que existan valores por tipo de saldo
+              --saldo10
+              SELECT NVL(COUNT(*),0) INTO R_SALDO10
+              FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+              WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+              AND DET.COD_CUENTA = R_COD_CUENTA
+              AND DET.COD_TIPSALDO IN (10);
+              --saldo11
+              SELECT NVL(COUNT(*),0) INTO R_SALDO11
+              FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+              WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+              AND DET.COD_CUENTA = R_COD_CUENTA
+              AND DET.COD_TIPSALDO IN (11);
+              --saldo12
+              SELECT NVL(COUNT(*),0) INTO R_SALDO12
+              FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+              WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+              AND DET.COD_CUENTA = R_COD_CUENTA
+              AND DET.COD_TIPSALDO IN (12);
+              --saldo13  
+              SELECT NVL(COUNT(*),0) INTO R_SALDO13
+              FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+              WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+              AND DET.COD_CUENTA = R_COD_CUENTA
+              AND DET.COD_TIPSALDO IN (13);
+              --saldo17
+              SELECT NVL(COUNT(*),0) INTO R_SALDO17
+              FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+              WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+              AND DET.COD_CUENTA = R_COD_CUENTA
+              AND DET.COD_TIPSALDO IN (17);
+            
+          ----SALTO TOTAL
+            SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+            INTO SAL_TOTAL
+                FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                AND DET.COD_CUENTA = R_COD_CUENTA
+               GROUP BY DET.COD_INVERSION,MV.COD_EMPRESA;
+               
+             ----Inserta en variables valores por tipo de saldo    
+             --S10
+              IF R_SALDO10 > 0 THEN 
+                  SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+                  INTO R_SALDO10
+                  FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                  WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                  AND DET.COD_CUENTA = R_COD_CUENTA
+                  AND DET.COD_TIPSALDO IN (10)
+                  GROUP BY DET.COD_INVERSION,DET.COD_TIPSALDO, MV.COD_EMPRESA,DET.COD_TIPSALDO;
+              END IF;
+             --S11 
+              IF R_SALDO11 > 0 THEN
+                  SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+                  INTO R_SALDO11
+                  FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                  WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                  AND DET.COD_CUENTA = R_COD_CUENTA
+                  AND DET.COD_TIPSALDO IN (11)
+                  GROUP BY DET.COD_INVERSION,DET.COD_TIPSALDO, MV.COD_EMPRESA,DET.COD_TIPSALDO;
+              END IF;
+             --S12
+              IF R_SALDO12 > 0 THEN
+                  SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+                  INTO R_SALDO12
+                  FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                  WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                  AND DET.COD_CUENTA = R_COD_CUENTA
+                  AND DET.COD_TIPSALDO IN (12)
+                  GROUP BY DET.COD_INVERSION,DET.COD_TIPSALDO, MV.COD_EMPRESA,DET.COD_TIPSALDO;
+              END IF;
+             ---S13
+              IF R_SALDO13 > 0 THEN
+                  SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+                  INTO R_SALDO13
+                  FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                  WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                  AND DET.COD_CUENTA = R_COD_CUENTA
+                  AND DET.COD_TIPSALDO IN (13)
+                  GROUP BY DET.COD_INVERSION,DET.COD_TIPSALDO, MV.COD_EMPRESA,DET.COD_TIPSALDO;
+              END IF;
+             --S17
+              IF R_SALDO17 > 0 THEN 
+                  SELECT ROUND(SUM(DET.TOT_CUOTA)*VALOR_CUOTA(MV.COD_EMPRESA, (SELECT MAX(FEC_VALOR) FROM FO_VALORES),DET.COD_INVERSION),2)
+                  INTO R_SALDO17
+                  FROM FO_MOVIMTOS_DETA DET, FO_MOVIMTOS MV 
+                  WHERE DET.NUM_MOVIMTO=MV.NUM_MOVIMTO 
+                  AND DET.COD_CUENTA = R_COD_CUENTA
+                  AND DET.COD_TIPSALDO IN (17)
+                  GROUP BY DET.COD_INVERSION,DET.COD_TIPSALDO, MV.COD_EMPRESA,DET.COD_TIPSALDO;
+              END IF;
+              
+              --Inserta tipo de cargo
+              R_VALOR_TOTAL := R_CARGO_POR /100;
+              
+              IF R_CARGO_POR > 0 OR R_COD_TIP_RETIRO = 51 THEN 
+                  R_VAR :='P';
+                  R_VALORP := (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5) * R_VALOR_TOTAL;
+              ELSE 
+                  R_VAR :='N';
+              END IF;
+             
+              IF R_CARGO_POR > 0 OR R_COD_TIP_RETIRO = 52 THEN 
+                  R_VAR :='P';
+                  R_VALOR := (R_SALDO10+R_SALDO11+R_SALDO17) * R_VALOR_TOTAL;
+              ELSE 
+                  R_VAR :='N';
+              END IF;
+          ------------------------------------------------------------------------------
+              IF R_EXT<>0 THEN  
+                IF R_COD_TIP_RETIRO = 52 THEN
+                    IF R_CARGO_POR = 0
+                        THEN
+                             INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD, COD_EMPRESA,COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2, R_TIP_R ,R_COD_CUENTA,1,'N',SAL_TOTAL,R_VALOR, (SAL_TOTAL-R_VALOR),'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),'','S','T',USER,CURRENT_DATE,USER,CURRENT_DATE);
+                        
+                         IF R_SALDO10 > 0 THEN
+                             ---SALDO 10
+                             INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,10,R_SALDO10/*,USER,CURRENT_DATE*/);
+                         END IF;   
+                         IF R_SALDO11 > 0 THEN
+                             ---SALDO 11    
+                             INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,11,R_SALDO11/*,USER,CURRENT_DATE*/);
+                         END IF; 
+                         IF R_SALDO12 > 0 THEN
+                             ---SALDO 12         
+                             INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,12,R_SALDO12/*,USER,CURRENT_DATE*/);
+                         END IF; 
+                         IF R_SALDO13 > 0 THEN
+                             ---SALDO 13          
+                             INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,13,R_SALDO13/*,USER,CURRENT_DATE*/);
+                         END IF; 
+                         IF R_SALDO17 > 0 THEN
+                             ---SALDO 17        
+                             INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,17,R_SALDO17/*,USER,CURRENT_DATE*/);
+                         END IF;  
+
+                         INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION/*,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION*/)
+                         VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,1,'S','E'/*,USER,CURRENT_DATE,USER,CURRENT_DATE*/);       
+                                               
+                         INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION/*,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION*/)
+                         VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL) ,2,2,'S','E'/*,USER,CURRENT_DATE,USER,CURRENT_DATE*/);  
+                                                
+                         INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE/*,INCLUIDO_POR,FEC_INCLUSION*/)
+                         VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,C_COD_PERS,'C',100/*,USER,CURRENT_DATE*/);
+                                        
+                         SELECT MAX(NUM_SOLICITUD) 
+                         INTO R_SOLICITUD 
+                         FROM FO_SOLICITUD_RETIRO  
+                         WHERE COD_CUENTA= R_COD_CUENTA  
+                         AND MONTO_SOLICITUD= SAL_TOTAL;                    
+                    ELSE                           
+                        IF R_SALDO12 > 0 OR R_SALDO13 >0
+                            THEN
+                             INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD, COD_EMPRESA,COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2, R_TIP_R_1 ,R_COD_CUENTA,1,'N',R_SALDO12+R_SALDO13,0, (R_SALDO12+R_SALDO13-0),'FO',20,25,20,51,100,0,'N','','S','P',USER,CURRENT_DATE,USER,CURRENT_DATE);
+                             
+                             SELECT MAX(NUM_SOLICITUD) 
+                             INTO R_SOLICITUD_1
+                             FROM FO_SOLICITUD_RETIRO  
+                             WHERE COD_CUENTA= R_COD_CUENTA  
+                             AND MONTO_SOLICITUD= R_SALDO12+R_SALDO13;
+                             
+                             INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD, COD_EMPRESA,COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                            VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2, R_TIP_R ,R_COD_CUENTA,1,'N',R_SALDO10+R_SALDO11+R_SALDO17,R_VALOR, (R_SALDO10+R_SALDO11+R_SALDO17-R_VALOR),'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),R_CARGO_POR,'S','T',USER,CURRENT_DATE,USER,CURRENT_DATE);
+                             
+                            SELECT MAX(NUM_SOLICITUD) 
+                             INTO R_SOLICITUD
+                             FROM FO_SOLICITUD_RETIRO  
+                             WHERE COD_CUENTA= R_COD_CUENTA  
+                             AND MONTO_SOLICITUD= R_SALDO10+R_SALDO11+R_SALDO17; 
+                             
+                             IF R_SALDO10 > 0 THEN
+                                 ---SALDO 10
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES(R_SOLICITUD,2,10,R_SALDO10,USER,CURRENT_DATE);
+                             END IF;   
+                             IF R_SALDO11 > 0 THEN
+                                 ---SALDO 11    
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES(R_SOLICITUD,2,11,R_SALDO11,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO12 > 0 THEN
+                                 ---SALDO 12         
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES(R_SOLICITUD_1,2,12,R_SALDO12,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO13 > 0 THEN
+                                 ---SALDO 13          
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES(R_SOLICITUD_1,2,13,R_SALDO13,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO17 > 0 THEN
+                                 ---SALDO 17        
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES(R_SOLICITUD,2,17,R_SALDO17,USER,CURRENT_DATE);
+                             END IF;  
+                          
+                            INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(R_SOLICITUD_1,2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                             
+                              INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(R_SOLICITUD,2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);           
+                                                   
+                             INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(R_SOLICITUD_1 ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                             
+                             INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES(R_SOLICITUD ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE); 
+                                                    
+                             INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                             VALUES(R_SOLICITUD_1,2,C_COD_PERS,'C',100,USER,CURRENT_DATE);
+                             
+                             INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                             VALUES(R_SOLICITUD,2,C_COD_PERS,'C',100,USER,CURRENT_DATE);  
+                             
+                             COMMIT;
+                             UPDATE FO.FO_SOLICITUD_RETIRO
+                                SET FEC_APROBACION = CURRENT_DATE,
+                                    USU_APROBACION = USER,
+                                    ESTADO = 4
+                             WHERE NUM_SOLICITUD = R_SOLICITUD_1;
+                             
+                             COMMIT; 
+                             
+                             R_NUM_SOLICITUD := R_SOLICITUD_1;
+                             R_TSP := R_TSP;
+                             R_ACH := R_ACH;
+                             R_CEQUE := R_CEQUE;
+                             R_FORMA_PAGO := R_FORMA_PAGO;
+                             R_APORTE_PATRONAL := R_APORTE_PATRONAL;
+                             R_CUENTA_ORIGEN := R_CUENTA_ORIGEN;
+                             R_CUENTA_DESTINO := R_CUENTA_DESTINO;
+                             R_BANCO_DESTINO := R_BANCO_DESTINO;
+                             R_TIPO_CUENTA := R_TIPO_CUENTA;
+                             
+                             R_SOLI_RETIRO_P_3 (R_COD_CUENTA, R_NUM_SOLICITUD, R_TSP, R_ACH, R_CEQUE, R_FORMA_PAGO, R_APORTE_PATRONAL,R_CUENTA_ORIGEN,R_CUENTA_DESTINO,R_BANCO_DESTINO,R_TIPO_CUENTA,R_ERROR);
+                                                
+                        ELSE
+                            INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD, COD_EMPRESA,COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                            VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2, R_TIP_R ,R_COD_CUENTA,1,'N',SAL_TOTAL,R_VALOR, (SAL_TOTAL-R_VALOR),'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),R_CARGO_POR,'S','T',USER,CURRENT_DATE,USER,CURRENT_DATE);
+                                IF R_SALDO10 > 0 THEN
+                                 ---SALDO 10
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,10,R_SALDO10,USER,CURRENT_DATE);
+                             END IF;   
+                             IF R_SALDO11 > 0 THEN
+                                 ---SALDO 11    
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,11,R_SALDO11,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO12 > 0 THEN
+                                 ---SALDO 12         
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,12,R_SALDO12,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO13 > 0 THEN
+                                 ---SALDO 13          
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,13,R_SALDO13,USER,CURRENT_DATE);
+                             END IF; 
+                             IF R_SALDO17 > 0 THEN
+                                 ---SALDO 17        
+                                 INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                 VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,17,R_SALDO17,USER,CURRENT_DATE);
+                             END IF;  
+
+                             INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);       
+                                                   
+                             INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL) ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                                                    
+                             INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                             VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= SAL_TOTAL),2,C_COD_PERS,'C',100,USER,CURRENT_DATE);
+                                            
+                             SELECT MAX(NUM_SOLICITUD) 
+                             INTO R_SOLICITUD 
+                             FROM FO_SOLICITUD_RETIRO  
+                             WHERE COD_CUENTA= R_COD_CUENTA  
+                             AND MONTO_SOLICITUD= SAL_TOTAL;
+                                
+                        END IF;
+                    END IF;        
+                     
+                 END IF;
+                 
+                if R_COD_TIP_RETIRO = '51' and R_CARGO_POR = 0 and C_COD_CTA_COLECTIVA IS NOT NULL AND R_SALDO_PA NOT IN ('S') THEN 
+                    --VERIFICA SI LA CUENTA COLECTIVA PERMITE RETIRO DE SALDOS PATRONALES y si la cuenta es contributiva 15-02-2018
+                      SELECT PER_SALDO_P, TIP_PRODUCTO
+                      INTO R_SALDO_PA, R_CTA_CONTRI
+                      FROM FO_CUENTAS C
+                      WHERE C.COD_CUENTA= C_COD_CTA_COLECTIVA;
+                      
+                    INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD,COD_EMPRESA, COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,
+                    TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR, FEC_MODIFICACION)
+                    VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2,R_TIP_R, R_COD_CUENTA,1,'N', (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5),R_VALORP, (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5), 'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),'','S','P', USER,CURRENT_DATE,USER,CURRENT_DATE);
+                                         
+                    IF R_SALDO1 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,10,R_SALDO1,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO2 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,11,R_SALDO2,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO12 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,12,R_SALDO12,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO5 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,17,R_SALDO5,USER,CURRENT_DATE);
+                    END IF;
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);       
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)) ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                               
+                    INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,C_COD_PERS,'C',100,USER,CURRENT_DATE);
+
+                    SELECT MAX(NUM_SOLICITUD) 
+                    INTO R_SOLICITUD
+                    FROM FO_SOLICITUD_RETIRO  
+                    WHERE COD_CUENTA= R_COD_CUENTA  
+                    AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5);
+                    
+                elsif R_COD_TIP_RETIRO = '51' and R_CARGO_POR = 0 and C_COD_CTA_COLECTIVA IS NOT NULL AND R_SALDO_PA is null THEN 
+
+                        --VERIFICA SI LA CUENTA COLECTIVA PERMITE RETIRO DE SALDOS PATRONALES y si la cuenta es contributiva 15-02-2018
+                      SELECT PER_SALDO_P, TIP_PRODUCTO
+                      INTO R_SALDO_PA, R_CTA_CONTRI
+                      FROM FO_CUENTAS C
+                      WHERE C.COD_CUENTA= C_COD_CTA_COLECTIVA;
+
+                    INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD,COD_EMPRESA, COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,
+                    TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR, FEC_MODIFICACION)
+                    VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2,R_TIP_R, R_COD_CUENTA,1,'N', (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5),R_VALORP, (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5), 'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),'','S','P', USER,CURRENT_DATE,USER,CURRENT_DATE);
+                                         
+                    IF R_SALDO1 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,10,R_SALDO1,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO2 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,11,R_SALDO2,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO12 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,12,R_SALDO12,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO5 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,17,R_SALDO5,USER,CURRENT_DATE);
+                    END IF;
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);       
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)) ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                               
+                    INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5)),2,C_COD_PERS,'C',100,USER,CURRENT_DATE);
+
+                    SELECT MAX(NUM_SOLICITUD) 
+                    INTO R_SOLICITUD
+                    FROM FO_SOLICITUD_RETIRO  
+                    WHERE COD_CUENTA= R_COD_CUENTA  
+                    AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO12+R_SALDO5);
+                  --TERMINA AQUI   
+                 
+                --VALIDACION NUEVA 15-02-2018
+                ELSIF R_COD_TIP_RETIRO='51' THEN 
+                    IF R_CARGO_POR = 0
+                        THEN
+                            INSERT INTO FO_SOLICITUD_RETIRO(NUM_SOLICITUD,COD_EMPRESA, COD_TIPO_RETIRO,COD_CUENTA,ESTADO,IND_NOTIFICACION,MONTO_SOLICITUD,MONTO_CARGO,TOTAL,COD_SISTEMA,TIP_TRANSAC_CARGO,SUBTIP_TRANSAC_CARGO,
+                            TIP_TRANSAC,SUBTIP_TRANSAC,DISPONIBLE_RESC_PARCIAL,MIN_RESC_PARCIAL,TIPO_CARGO_RESC,CARGO_RESC,IND_SOLO_CK,TIPO_LIQUIDACION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR, FEC_MODIFICACION)
+                            VALUES(S_FO_SOLICITUD_RETIRO.NEXTVAL,2,R_TIP_R, R_COD_CUENTA,1,'N', (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5),R_VALORP, ((R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)-R_VALORP), 'FO',20,25,20,R_COD_TIP_RETIRO,100,0,TO_CHAR(R_VAR),'','S','P', USER,CURRENT_DATE,USER,CURRENT_DATE);
+                         ELSE
+                            INSERT INTO FO_SOLICITUD_RETIRO(/*1*/NUM_SOLICITUD,      
+                                                                                    /*2*/ COD_EMPRESA,
+                                                                                    /*3*/ COD_TIPO_RETIRO,
+                                                                                    /*4*/ COD_CUENTA,
+                                                                                    /*5*/ESTADO,
+                                                                                    /*6*/IND_NOTIFICACION,
+                                                                                    /*7*/ MONTO_SOLICITUD,
+                                                                                    /*8*/ MONTO_CARGO,
+                                                                                    /*9*/ TOTAL,
+                                                                                    /*10*/ COD_SISTEMA,
+                                                                                    /*11*/TIP_TRANSAC_CARGO,
+                                                                                    /*12*/SUBTIP_TRANSAC_CARGO,
+                                                                                    /*13*/TIP_TRANSAC,
+                                                                                    /*14*/SUBTIP_TRANSAC,
+                                                                                    /*15*/DISPONIBLE_RESC_PARCIAL,
+                                                                                    /*16*/MIN_RESC_PARCIAL,
+                                                                                    /*17*/TIPO_CARGO_RESC,
+                                                                                    /*18*/CARGO_RESC,
+                                                                                    /*19*/IND_SOLO_CK,
+                                                                                    /*20*/TIPO_LIQUIDACION,
+                                                                                    /*21*/INCLUIDO_POR,
+                                                                                    /*22*/ FEC_INCLUSION,
+                                                                                    /*23*/ MODIFICADO_POR,
+                                                                                    /*24*/ FEC_MODIFICACION)
+                            VALUES(/*1*/S_FO_SOLICITUD_RETIRO.NEXTVAL,   
+                                        /*2*/ 2,
+                                        /*3*/ R_TIP_R,
+                                        /*4*/ R_COD_CUENTA,
+                                        /*5*/1,
+                                        /*6*/'N',
+                                        /*7*/ (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5),
+                                        /*8*/ R_VALORP,
+                                        /*9*/ ((R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)-R_VALORP),
+                                        /*10*/ 'FO',
+                                        /*11*/20,
+                                        /*12*/25,
+                                        /*13*/20,
+                                        /*14*/R_COD_TIP_RETIRO,
+                                        /*15*/100,
+                                        /*16*/0,
+                                        /*17*/TO_CHAR(R_VAR),
+                                        /*18*/R_CARGO_POR,
+                                        /*19*/'S',
+                                        /*20*/'P',
+                                        /*21*/ USER,
+                                        /*22*/ CURRENT_DATE,
+                                        /*23*/ USER,
+                                        /*24*/ CURRENT_DATE);
+                    END IF;                       
+                    IF R_SALDO1 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,10,R_SALDO1,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO2 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                                VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,11,R_SALDO2,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO3 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,12,R_SALDO3,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO4 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,13,R_SALDO4,USER,CURRENT_DATE);
+                    END IF;
+                    IF R_SALDO5 > 0 THEN
+                        INSERT INTO FO_SOLI_RETIRO_TIPSALDO(NUM_SOLICITUD,COD_EMPRESA,COD_TIPSALDO,MONTO,INCLUIDO_POR,FEC_INCLUSION)
+                        VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,17,R_SALDO5,USER,CURRENT_DATE);
+                    END IF;
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,1,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);       
+                               
+                    INSERT INTO FO_SOLI_RETIRO_REQUISITO(NUM_SOLICITUD,COD_EMPRESA,COD_REQUISITO,IND_REQ_OBLIGAT,CHECK_REVISION,INCLUIDO_POR,FEC_INCLUSION,MODIFICADO_POR,FEC_MODIFICACION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)) ,2,2,'S','E',USER,CURRENT_DATE,USER,CURRENT_DATE);  
+                               
+                    INSERT INTO FO_SOLI_RETIRO_BENEFICIARIO(NUM_SOLICITUD,COD_EMPRESA,COD_PERSONA,MEDIO_PAGO,PORCENTAJE,INCLUIDO_POR,FEC_INCLUSION)
+                    VALUES((SELECT MAX(NUM_SOLICITUD) FROM FO_SOLICITUD_RETIRO  WHERE COD_CUENTA= R_COD_CUENTA  AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5)),2,C_COD_PERS,'C',100,USER,CURRENT_DATE);
+
+                    SELECT MAX(NUM_SOLICITUD) 
+                    INTO R_SOLICITUD
+                    FROM FO_SOLICITUD_RETIRO  
+                    WHERE COD_CUENTA= R_COD_CUENTA  
+                    AND MONTO_SOLICITUD= (R_SALDO1+R_SALDO2+R_SALDO3+R_SALDO4+R_SALDO5);
+                 end if;   
+              END IF;
+                         
+          EXCEPTION WHEN NO_DATA_FOUND THEN
+              R_ERRORES := 'Error-no existe cliente '||R_COD_CUENTA||' Error '||SQLCODE||' '||SQLERRM;
+          WHEN  OTHERS THEN
+              R_ERRORES := 'Error-Fallo en el procedimiento :('||SQLCODE||' '||SQLERRM;
+          END;
+          R_ERROR := R_ERRORES;     
+          R_NUM_SOLICITUD := R_SOLICITUD;
+     END;
+
+PROCEDURE R_SOLI_RETIRO_P_2 (R_COD_CUENTA IN VARCHAR2,
+                                                R_NUM_SOLICITUD IN VARCHAR2,
+                                                R_ERROR OUT VARCHAR2) IS
+                                                
+    R_ERRORES VARCHAR2(100) := 'OK';
+    VNMAXREGISTROS NUMBER ;
+    VNCONTADOR     NUMBER;
+
+    CURSOR CUR_CUENTAS IS
+    SELECT NUM_SOLICITUD
+    FROM FO.FO_SOLICITUD_RETIRO
+    WHERE NUM_SOLICITUD = R_NUM_SOLICITUD;
+
+    BEGIN
+        BEGIN
+            VNCONTADOR := 0;
+              FOR X IN CUR_CUENTAS LOOP
+                 BEGIN
+                   UPDATE FO.FO_SOLICITUD_RETIRO
+                      SET FEC_APROBACION = CURRENT_DATE,
+                            USU_APROBACION = USER,
+                            ESTADO = 4
+                      WHERE NUM_SOLICITUD = X.NUM_SOLICITUD;
+                 END;
+                 IF VNCONTADOR > VNMAXREGISTROS THEN
+                    COMMIT;
+                    VNCONTADOR := 0;
+                 ELSE
+                    VNCONTADOR := VNCONTADOR + 1;
+                 END IF;
+              END LOOP; 
+              
+              IF VNCONTADOR > 0 THEN
+                 COMMIT;
+              END IF;
+        EXCEPTION WHEN NO_DATA_FOUND THEN
+              R_ERRORES := 'Error-no existe cliente '||R_COD_CUENTA||' Error '||SQLCODE;
+          WHEN  OTHERS THEN
+              R_ERRORES := 'Error-Fallo en el procedimiento :('||SQLCODE;
+        END;
+        R_ERROR := R_ERRORES;
+    END;
+    
+PROCEDURE R_SOLI_RETIRO_P_3 (R_COD_CUENTA IN VARCHAR2,
+                                                R_NUM_SOLICITUD IN VARCHAR2,
+                                                R_TSP IN NUMBER,
+                                                R_ACH IN NUMBER,
+                                                R_CEQUE IN NUMBER,
+                                                R_FORMA_PAGO IN VARCHAR2,
+                                                R_APORTE_PATRONAL IN VARCHAR2,
+                                                R_CUENTA_ORIGEN IN VARCHAR2,
+                                                R_CUENTA_DESTINO IN VARCHAR2,
+                                                R_BANCO_DESTINO IN VARCHAR2,
+                                                R_TIPO_CUENTA IN VARCHAR2,
+                                                R_ERROR OUT VARCHAR2) IS
+                                                
+    R_ERRORES VARCHAR2(100) := 'OK';
+    VNMAXREGISTROS NUMBER ;
+    VNCONTADOR     NUMBER;
+    REFE  NUMBER;
+    INVERSION VARCHAR(5);
+    R_V_MONTO    NUMBER;
+    R_DECRIPCION VARCHAR(100);
+    MOV NUMBER(28);
+    R_SALDO10 NUMBER(38,2);
+    R_SALDO11 NUMBER(38,2);
+    R_SALDO12 NUMBER(38,2);
+    R_SALDO13 NUMBER(38,2);
+    R_SALDO17 NUMBER(38,2);
+    COMISION NUMBER(38,2);
+    COMISION_S10 NUMBER(38,2);
+    COMISION_S11 NUMBER(38,2);
+    COMISION_S12 NUMBER(38,2);
+    COMISION_S13 NUMBER(38,2);
+    COMISION_S17 NUMBER(38,2);
+
+    CURSOR CUR_CUENTAS IS
+    SELECT NUM_SOLICITUD,MONTO_SOLICITUD, FO.SUBTIP_TRANSAC, CASE WHEN FO.SUBTIP_TRANSAC = '51' THEN '1' ELSE '2' END TRANSAC
+    FROM FO.FO_SOLICITUD_RETIRO FO
+    WHERE NUM_SOLICITUD = R_NUM_SOLICITUD;
+
+     BEGIN
+        SELECT DISTINCT COD_INVERSION INTO INVERSION
+        FROM FO_DIST_APORTES_X_CUENTA
+        WHERE COD_CUENTA = R_COD_CUENTA;
+        
+        SELECT nvl((TR.CARGO_RESC/100),0) INTO COMISION
+        FROM FO_SOLICITUD_RETIRO TR
+        WHERE TR.NUM_SOLICITUD = R_NUM_SOLICITUD;
+            
+        SELECT NVL(COUNT(*),0) INTO R_SALDO10
+        FROM FO_SOLI_RETIRO_TIPSALDO TP
+        WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+        AND TP.COD_TIPSALDO = 10;
+        
+        SELECT NVL(COUNT(*),0) INTO R_SALDO11
+        FROM FO_SOLI_RETIRO_TIPSALDO TP
+        WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+        AND TP.COD_TIPSALDO = 11;
+        
+        SELECT NVL(COUNT(*),0) INTO R_SALDO12
+        FROM FO_SOLI_RETIRO_TIPSALDO TP
+        WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+        AND TP.COD_TIPSALDO = 12;
+            
+        SELECT NVL(COUNT(*),0) INTO R_SALDO13
+        FROM FO_SOLI_RETIRO_TIPSALDO TP
+        WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+        AND TP.COD_TIPSALDO = 13;
+            
+        SELECT NVL(COUNT(*),0) INTO R_SALDO17
+        FROM FO_SOLI_RETIRO_TIPSALDO TP
+        WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+        AND TP.COD_TIPSALDO = 17;
+            
+        --S10
+         IF R_SALDO10 > 0 THEN 
+             SELECT TP.MONTO-(TP.MONTO * COMISION), TP.MONTO * COMISION
+             INTO R_SALDO10, COMISION_S10
+             FROM FO_SOLI_RETIRO_TIPSALDO TP 
+             WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+             AND TP.COD_TIPSALDO = 10;
+         END IF;
+        --S11 
+        IF R_SALDO11 > 0 THEN
+            SELECT TP.MONTO-(TP.MONTO * COMISION),TP.MONTO * COMISION
+            INTO R_SALDO11, COMISION_S11
+            FROM FO_SOLI_RETIRO_TIPSALDO TP 
+            WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+            AND TP.COD_TIPSALDO = 11;
+        END IF;
+        --S12
+        IF R_SALDO12 > 0 THEN
+            SELECT TP.MONTO-(TP.MONTO * COMISION),TP.MONTO * COMISION
+            INTO R_SALDO12, COMISION_S12
+            FROM FO_SOLI_RETIRO_TIPSALDO TP 
+            WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+            AND TP.COD_TIPSALDO = 12;
+        END IF;
+        --S13
+        IF R_SALDO13 > 0 THEN
+            SELECT TP.MONTO-(TP.MONTO * COMISION), TP.MONTO * COMISION
+            INTO R_SALDO13, COMISION_S13
+            FROM FO_SOLI_RETIRO_TIPSALDO TP 
+            WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+            AND TP.COD_TIPSALDO = 13;
+        END IF;
+        --S17
+        IF R_SALDO17 > 0 THEN 
+            SELECT TP.MONTO-(TP.MONTO * COMISION), TP.MONTO * COMISION
+            INTO R_SALDO17, COMISION_S17
+            FROM FO_SOLI_RETIRO_TIPSALDO TP 
+            WHERE R_NUM_SOLICITUD = TP.NUM_SOLICITUD 
+            AND TP.COD_TIPSALDO = 17;
+        END IF;
+
+
+        BEGIN
+            VNCONTADOR := 0;
+              FOR X IN CUR_CUENTAS LOOP
+                  BEGIN
+                            
+                      UPDATE FO.FO_SOLICITUD_RETIRO
+                      SET FEC_APRO_PAGO = CURRENT_DATE,
+                             USU_APRO_PAGO = USER,
+                             ESTADO = 2
+                      WHERE NUM_SOLICITUD = X.NUM_SOLICITUD;
+                                              
+                      INSERT INTO FO_MOVIMTOS (NUM_MOVIMTO, FEC_MOVIMTO,FEC_OPERACION,COD_EMPRESA,COD_AGENCIA,COD_SISTEMA,TIP_TRANSAC,SUBTIP_TRANSAC,MON_MOVIMTO,FEC_APLICADO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA,NUM_DOCUMENTO,DESCRIPCION)
+                      VALUES(S_FO_MOVIMTOS.NEXTVAL, (SELECT MAX(FEC_VALOR) FROM FO_VALORES), (SELECT MAX(FEC_VALOR) FROM FO_VALORES), 2, INVERSION, 'FO', 2, X.TRANSAC,-ABS(X.MONTO_SOLICITUD), CURRENT_DATE, 'P', USER, CURRENT_DATE,X.NUM_SOLICITUD,X.NUM_SOLICITUD ,CONCAT ( 'Pago de la Solicitud de Retiro Numero: ' , X.NUM_SOLICITUD));          
+
+                      SELECT MV.NUM_MOVIMTO 
+                      INTO REFE
+                      FROM  FO_MOVIMTOS MV
+                      WHERE MV.NUM_DOCUMENTO = TO_CHAR(X.NUM_SOLICITUD);
+
+                      IF R_SALDO10 > 0 THEN
+                          ---SALDO 10
+                          INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                          VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, X.SUBTIP_TRANSAC, 10, INVERSION,-ABS(R_SALDO10),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          IF COMISION > 0 THEN 
+                            INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                            VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, '25', 10, INVERSION,-ABS(COMISION_S10),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          END IF;
+                      END IF;   
+                      IF R_SALDO11 > 0 THEN
+                          ---SALDO 11    
+                          INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                          VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20,  X.SUBTIP_TRANSAC, 11, INVERSION,-ABS(R_SALDO11),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          IF COMISION > 0 THEN 
+                            INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                            VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, '25', 11, INVERSION,-ABS(COMISION_S11),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          END IF;
+                      END IF; 
+                      IF R_SALDO12 > 0 THEN
+                          ---SALDO 12         
+                          INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                          VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20,  X.SUBTIP_TRANSAC, 12, INVERSION,-ABS(R_SALDO12),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          IF COMISION > 0 THEN 
+                            INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                            VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, '25', 12, INVERSION,-ABS(COMISION_S12),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          END IF;
+                      END IF; 
+                      IF R_SALDO13 > 0 THEN
+                          ---SALDO 13          
+                          INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                          VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, X.SUBTIP_TRANSAC, 13, INVERSION,-ABS(R_SALDO13),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          IF COMISION > 0 THEN 
+                            INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                            VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, '25', 13, INVERSION,-ABS(COMISION_S13),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          END IF;
+                      END IF; 
+                      IF R_SALDO17 > 0 THEN
+                          ---SALDO 17        
+                          INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                          VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, X.SUBTIP_TRANSAC, 17, INVERSION,-ABS(R_SALDO17),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          IF COMISION > 0 THEN 
+                            INSERT INTO FO_MOVIMTOS_DETA(NUM_MOVIMTO,NUM_MOVIMTO_DETA,COD_EMPRESA,COD_SISTEMA,COD_CUENTA,TIP_TRANSAC,SUBTIP_TRANSAC,COD_TIPSALDO,COD_INVERSION,MON_MOVIMTO,ESTADO,INCLUIDO_POR,FEC_INCLUSION,NUM_REFERENCIA)
+                            VALUES(REFE, S_FO_MOVIMTODETA.NEXTVAL, 2, 'FO',R_COD_CUENTA, 20, '25', 17, INVERSION,-ABS(COMISION_S17),'P',USER,CURRENT_DATE,X.NUM_SOLICITUD);
+                          END IF;
+                      END IF;       
+                  END;
+              END LOOP; 
+              
+          begin
+            IF R_APORTE_PATRONAL = 'S'
+                THEN
+                    insert into FICOPEN.P_RETIROS_CAJA PR (PR.NUM_SOLICITUD, 
+                                                                                PR.NUM_CUENTA, 
+                                                                                PR.NOMBRE_CLIENTE, 
+                                                                                PR.ID_CLIENTE, 
+                                                                                PR.FORMA_PAGO, 
+                                                                                PR.MONEDA, 
+                                                                                PR.MONTO_RETIRAR,
+                                                                                PR.MONTO_TSP,
+                                                                                PR.MONTO_ACH,
+                                                                                PR.MONTO_CHEQUE,         
+                                                                                PR.MONTO_TOTAL, 
+                                                                                PR.TIPO_PAGO, 
+                                                                                PR.ESTADO, 
+                                                                                PR.USU_APRUEBA_PAGO, 
+                                                                                PR.FECHA_SOLICITUD,
+                                                                                PR.CUENTA_BANCARIA,
+                                                                                PR.CUENTA_DESTINO,
+                                                                                PR.BANCO_DESTINO,
+                                                                                PR.TIPO_CUENTA)
+                    select FO.NUM_SOLICITUD, FO.COD_CUENTA, (select PF.PRIMER_NOMBRE||' '||PF.SEGUNDO_NOMBRE||' '||PF.PRIMER_APELLIDO||' '||PF.SEGUNDO_APELLIDO from personas_fisicas pf where PF.COD_PER_FISICA = CU.COD_CLIENTE),
+                             (SELECT ID.NUM_ID FROM ID_PERSONAS ID WHERE ID.COD_PERSONA = CU.COD_CLIENTE), R_FORMA_PAGO,
+                              (SELECT MO.ABREVIATURA FROM MONEDA MO, FO_PRODUCTOS PR WHERE MO.COD_MONEDA = PR.COD_MONEDA AND PR.COD_PRODUCTO = CU.COD_PRODUCTO),
+                             FO.TOTAL,R_TSP,R_ACH, R_CEQUE, (FO.TOTAL-R_TSP-R_CEQUE-R_ACH),'R', 'P', FO.USU_APRO_PAGO, FO.FEC_APRO_PAGO,R_CUENTA_ORIGEN,R_CUENTA_DESTINO,R_BANCO_DESTINO,R_TIPO_CUENTA
+                    from FO.FO_SOLICITUD_RETIRO FO, fo_cuentas cu
+                    where FO.COD_CUENTA = CU.COD_CUENTA
+                    and FO.NUM_SOLICITUD = R_NUM_SOLICITUD
+                    and FO.ESTADO = '2';
+            ELSIF R_APORTE_PATRONAL = 'N' 
+                THEN
+                    insert into FICOPEN.P_RETIROS_CAJA PR (PR.NUM_SOLICITUD, 
+                                                                                PR.NUM_CUENTA, 
+                                                                                PR.NOMBRE_CLIENTE, 
+                                                                                PR.ID_CLIENTE, 
+                                                                                PR.FORMA_PAGO, 
+                                                                                PR.MONEDA, 
+                                                                                PR.MONTO_RETIRAR, 
+                                                                                PR.MONTO_TSP,
+                                                                                PR.MONTO_ACH,
+                                                                                PR.MONTO_CHEQUE, 
+                                                                                PR.MONTO_TOTAL, 
+                                                                                PR.TIPO_PAGO, 
+                                                                                PR.ESTADO, 
+                                                                                PR.USU_APRUEBA_PAGO, 
+                                                                                PR.FECHA_SOLICITUD,
+                                                                                PR.CUENTA_BANCARIA,
+                                                                                PR.CUENTA_DESTINO,
+                                                                                PR.BANCO_DESTINO,
+                                                                                PR.TIPO_CUENTA)
+                    select FO.NUM_SOLICITUD, FO.COD_CUENTA, (select PF.PRIMER_NOMBRE||' '||PF.SEGUNDO_NOMBRE||' '||PF.PRIMER_APELLIDO||' '||PF.SEGUNDO_APELLIDO from personas_fisicas pf where PF.COD_PER_FISICA = CU.COD_CLIENTE),
+                             (SELECT ID.NUM_ID FROM ID_PERSONAS ID WHERE ID.COD_PERSONA = CU.COD_CLIENTE), R_FORMA_PAGO,
+                              (SELECT MO.ABREVIATURA FROM MONEDA MO, FO_PRODUCTOS PR WHERE MO.COD_MONEDA = PR.COD_MONEDA AND PR.COD_PRODUCTO = CU.COD_PRODUCTO),
+                             (R_SALDO10+R_SALDO11+R_SALDO17)L,R_TSP,R_ACH, R_CEQUE, ((R_SALDO10+R_SALDO11+R_SALDO17)-R_TSP-R_CEQUE-R_ACH),'R', 'P', FO.USU_APRO_PAGO, FO.FEC_APRO_PAGO,
+                              R_CUENTA_ORIGEN,R_CUENTA_DESTINO,R_BANCO_DESTINO,R_TIPO_CUENTA
+                    from FO.FO_SOLICITUD_RETIRO FO, fo_cuentas cu
+                    where FO.COD_CUENTA = CU.COD_CUENTA
+                    and FO.NUM_SOLICITUD = R_NUM_SOLICITUD
+                    and FO.ESTADO = '2';
+             END IF;
+          end;
+              
+        EXCEPTION WHEN NO_DATA_FOUND THEN
+              R_ERRORES := 'Error-no existe cliente '||R_COD_CUENTA||' Error '||SQLCODE;
+          WHEN  OTHERS THEN
+              R_ERRORES := 'Error-Fallo en el procedimiento :'||SQLCODE;
+        END;
+        R_ERROR := R_ERRORES;
+     END;
+
+END FPC_RETIROS;
+/
